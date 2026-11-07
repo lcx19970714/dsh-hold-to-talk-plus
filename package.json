@@ -1,0 +1,107 @@
+{
+  "name": "dsh-hold-to-talk",
+  "version": "0.1.4-cloud.5",
+  "description": "Fork of dsh-hold-to-talk: hold the mouse on the DSH Web composer, speak, release to insert. Local SenseVoice or ANY third-party ASR (OpenAI-compatible / chat-audio), plus user wordbank (术语表 + 纠正规则), prompt context from the composer draft, and a Settings page. 在原版长按语音输入基础上加了:云端 ASR、用户词库、输入框草稿作提示词、设置页。",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ]
+    }
+  },
+  "dependencies": {
+    "sherpa-onnx-node": "^1.13.8"
+  },
+  "optionalDependencies": {
+    "sherpa-onnx": "^1.13.8"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": ">=3.18.0 <4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "engines": {
+    "node": "^22.0.0 || >=24"
+  },
+  "scripts": {
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/model-cache.js && node --check lib/asr-worker.mjs && node --check lib/cloud-asr.mjs && node --check lib/wordbank.mjs && node --check lib/settings-store.mjs",
+    "test": "npm run check && node tools/client-smoke.mjs && node tools/host-test.mjs && node tools/client-test.mjs",
+    "test:ci": "npm run check && node tools/client-smoke.mjs",
+    "test:host": "node tools/host-test.mjs",
+    "test:client": "node tools/client-smoke.mjs && node tools/client-test.mjs",
+    "model:fetch": "node tools/fetch-model.mjs",
+    "test:decode": "node tools/decode-test.mjs tools/zh.wav",
+    "bench": "node tools/bench.mjs tools/zh.wav"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "plugin",
+    "voice",
+    "voice-input",
+    "speech-to-text",
+    "asr",
+    "sensevoice",
+    "sherpa-onnx",
+    "push-to-talk",
+    "hold-to-talk",
+    "wechat",
+    "dictation",
+    "cloud-asr",
+    "openai-compatible",
+    "whisper",
+    "fork",
+    "wordbank",
+    "hotwords",
+    "glossary",
+    "prompt",
+    "settings"
+  ],
+  "author": "wangzhanchao883 (original author); lcx19970714 (fork maintainer)",
+  "license": "MIT",
+  "_fork": {
+    "upstream": "dsh-hold-to-talk@0.1.4",
+    "upstreamRepo": "https://github.com/wangzhanchao883/dsh-hold-to-talk",
+    "changes": [
+      "lib/cloud-asr.mjs: 第三方 ASR 转发(transcriptions / chat-audio 两种协议,支持 system 提示词)",
+      "lib/wordbank.mjs: 用户词库解析(术语表 + 纠正规则)与本地结果后处理",
+      "lib/settings-store.mjs: 设置持久化(~/.dsh/hold-to-talk/settings.json)与校验",
+      "lib/index.js: 云端分支、提示词合成、草稿上下文、/settings 路由、热更新",
+      "lib/client.js: 松手时把输入框草稿作为上下文发送;设置 → 语音输入 页",
+      "lib/index.js + client.js: 云端实时预览(interim 走云端尾部窗口,浮层边说边出字)"
+    ],
+    "forkRepo": "https://github.com/lcx19970714/dsh-hold-to-talk-plus"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lcx19970714/dsh-hold-to-talk-plus.git"
+  },
+  "homepage": "https://github.com/lcx19970714/dsh-hold-to-talk-plus",
+  "bugs": {
+    "url": "https://github.com/lcx19970714/dsh-hold-to-talk-plus/issues"
+  }
+}

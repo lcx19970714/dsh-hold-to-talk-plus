@@ -1,0 +1,74 @@
+# dsh-hold-to-talk bundle patch layer.
+# 安装本包到 web profile 后,host 端加载主入口(长按语音输入:HTTP 路由 + 本地
+# SenseVoice 识别引擎 + 设置命名空间)。浏览器半身由 dsh.client 声明,随页面加载。
+#
+# 下面 config 里的每一项都是本插件 apply(ctx, entryConfig) 收到的配置;这就是
+# 唯一的配置入口。DSH 0.1.7 起设置面板改为 schema 驱动的自动表单,旧的
+# settings.register(ns, schema, {base}) 命名空间契约已废弃 → 本插件不注册设置,
+# 要改参数直接改这里(config 值即最终值,没有更高的用户层覆盖)。
+- insert:
+    - id: dsh-hold-to-talk
+      name: dsh-hold-to-talk
+      config:
+        enabled: true
+        # 长按判定:按住不动超过该毫秒数才进入录音(期间移动/选区/松手都算普通编辑)
+        holdThresholdMs: 400
+        # 按住后指针上移超过该像素数,进入"松开取消"态
+        cancelSlidePx: 60
+        # 边说边出字的间隔:每积累这么久的音频就重解码一次滑动窗口
+        # (实测原生引擎解 6 秒窗口约 0.9 秒,1.5 秒一轮留有余量)
+        interimIntervalMs: 1500
+        # 短于该时长的录音直接丢弃(防误触)
+        minHoldMs: 250
+        # 单次长按最长时长,到点自动定稿
+        maxHoldMs: 60000
+        # 实时预览解码的滑动窗口上限(秒);松手定稿始终用完整音频
+        maxWindowSec: 6
+        # 定稿后是否自动发送;默认 false = 只写进输入框,由你自己按发送
+        autoSend: false
+        # SenseVoice 语言:auto / zh / en / ja / ko / yue
+        language: auto
+        # 逆文本规整(把"二零二六年"变成"2026年"这类)
+        useItn: true
+        numThreads: 2
+        # 模型下载镜像(国内默认走 hf-mirror)
+        mirror: https://hf-mirror.com
+        # 模型缓存目录;留空 = ~/.dsh/hold-to-talk/models
+        modelDir: ""
+        # ─── 以下是本 fork 新增:识别引擎选择 ───────────────────────────
+        # local = 本地 SenseVoice(原版行为)
+        # cloud = 把整段音频编码成 WAV,POST 到下面的 OpenAI 兼容端点
+        asrEngine: local
+        # 任意 OpenAI 兼容 /v1/audio/transcriptions 端点,例如:
+        #   硅基流动  https://api.siliconflow.cn/v1/audio/transcriptions   (model: FunAudioLLM/SenseVoiceSmall)
+        #   Groq     https://api.groq.com/openai/v1/audio/transcriptions   (model: whisper-large-v3)
+        #   自建     http://127.0.0.1:8000/v1/audio/transcriptions         (faster-whisper-server / FunASR)
+        cloudAsrUrl: ""
+        cloudAsrModel: ""
+        cloudAsrApiKey: ""
+        # 协议:transcriptions = OpenAI /v1/audio/transcriptions(multipart)
+        #       chat-audio     = chat/completions + input_audio(base64),给百炼 qwen3-asr-flash 那类
+        cloudAsrApi: transcriptions
+        # 没填 cloudAsrApiKey 时只放行本机端点;填了才走公网服务
+        # chat-audio 模式额外并入请求体的字段(YAML 对象),一般留空
+        cloudAsrExtra: {}
+        # 云端语言提示;auto = 不发送该字段
+        cloudAsrLanguage: zh
+        # 上下文/热词提示(是否生效取决于服务商)
+        cloudAsrPrompt: ""
+        cloudTimeoutMs: 30000
+        # 云端失败时,本地模型若已就绪就回退到本地识别
+        cloudFallbackToLocal: true
+        # ─── 提示词 / 用户词库 / 输入框上下文(也可在 设置 → 语音输入 里改) ───
+        # 把输入框里已有的草稿一起作为上下文发给云端模型
+        useDraftContext: true
+        # 草稿最多取末尾多少字符
+        draftContextChars: 300
+        # 词库文件;留空 = ~/.dsh/hold-to-talk/words.txt
+        wordbankPath: ""
+        # 也可以直接把词条写在这里(换行分隔),与文件合并
+        wordbankInline: ""
+        # 本地识别结果也套用词库里的"正确=错写"规则
+        wordbankApplyToLocal: true
+        # 提示词总长度上限
+        promptMaxChars: 800
