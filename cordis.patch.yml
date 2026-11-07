@@ -59,6 +59,10 @@
         cloudTimeoutMs: 30000
         # 云端失败时,本地模型若已就绪就回退到本地识别
         cloudFallbackToLocal: true
+        # ─── 真流式(WebSocket):默认关,设置页里勾选即可 ───
+        cloudRealtime: false
+        cloudRealtimeUrl: wss://dashscope.aliyuncs.com/api-ws/v1/inference
+        cloudRealtimeModel: qwen-audio-3.1-asr-flash-streaming
         # ─── 提示词 / 用户词库 / 输入框上下文(也可在 设置 → 语音输入 里改) ───
         # 把输入框里已有的草稿一起作为上下文发给云端模型
         useDraftContext: true

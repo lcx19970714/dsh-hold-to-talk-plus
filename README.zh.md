@@ -13,6 +13,7 @@
 | 设置页面（设置 → 语音输入） | ❌ | ✅ |
 | 云端失败回退本地 | ❌ | ✅ |
 | **云端实时预览（边说边出字，松手再定稿）** | ❌ | ✅ |
+| **真流式 WebSocket（边录边发 PCM，字幕级）** | ❌ | ✅（默认关，设置里开） |
 
 ---
 
@@ -41,7 +42,7 @@ DSH 0.2.x 的设置页支持插件注册自己的页面（`settings.section` 槽
 | 步骤 | 内容 |
 |---|---|
 | ① 选服务商 | 一排胶囊按钮：**阿里云百炼（中文最准）** / **硅基流动（免费）** / **自建**。点一下自动填好端点、模型、协议、语言，并展开取 Key 引导 |
-| ② 填端点与 Key | 引擎/协议/语言/端点/模型 ID 网格排布；API Key 是密码框，已保存时只显示"已保存，留空不变" |
+| ② 填端点与 Key | 引擎/协议/语言/端点/模型 ID 网格排布；API Key 是密码框，已保存时只显示"已保存，留空不变"；下方有**「真流式（WebSocket）」开关**，勾选后展开 WS 地址与模型 |
 | ③ 测试连接 | 不用先保存：发 1.2 秒静音验证「网络 + 鉴权 + 模型名」，把 401/403/404/429/超时翻译成中文人话，并显示原始返回 |
 | ④ 上下文与词库 | 草稿上下文开关 + 字符数、**云端实时预览开关 + 间隔**、云端回退、本地套用规则、用户词库大文本框（显示词条/规则数、文件路径） |
 
@@ -169,6 +170,9 @@ cloudAsrApiKey: !!js process.env.DASHSCOPE_API_KEY
 | `cloudFallbackToLocal` | `true` | 云端失败回退本地 |
 | `cloudInterim` | `true` | 云端模式也做实时预览（边说边出字） |
 | `cloudInterimIntervalMs` | `2000` | 云端预览轮询间隔（毫秒，800~10000） |
+| `cloudRealtime` | `false` | **真流式**：走 WebSocket，边录边出字（默认关） |
+| `cloudRealtimeUrl` | `wss://dashscope.aliyuncs.com/api-ws/v1/inference` | 真流式 WS 地址（百炼 Inference 协议） |
+| `cloudRealtimeModel` | `qwen-audio-3.1-asr-flash-streaming` | 真流式模型 |
 | `useDraftContext` | `true` | 把输入框草稿当上下文 |
 | `draftContextChars` | `300` | 草稿取末尾多少字符（0 = 不取） |
 | `wordbankPath` | `""` | 词库文件；空 = `~/.dsh/hold-to-talk/words.txt` |
@@ -206,10 +210,39 @@ cloudAsrApiKey: !!js process.env.DASHSCOPE_API_KEY
 - 预览请求只带术语表，不带草稿（省 token、也避免草稿变化导致预览跳变）。
 - 关闭：设置页「云端也做实时预览」取消勾选，或 `cloudInterim: false`（此时云端模式基本不轮询，只在松手时识别一次）。
 
-### 6.2 百炼还有两种"更实时"的接口（未接，按需可选）
+### 6.2 真流式 WebSocket（v6，默认关）
 
-1. **`stream: true`**（同一次请求内部 token 流）：能比整段返回更早出字，但音频还是要先发完，**对"边说边出"帮助有限**，实现上要解析 SSE。
-2. **`qwen3-asr-flash-realtime`（WebSocket 真流式）**：边录边发 PCM、服务端持续回中间结果，延迟最低；单价约 1.188 元/小时（比非实时贵 ~50%），需要宿主侧接 WS + 客户端双工。**如果你要"字幕级"实时体验，我可以接这条。**
+设置页第 ② 步勾选 **「真流式（WebSocket）」** 即启用；协议见[百炼 WebSocket 接入指南](https://help.aliyun.com/zh/model-studio/qwen-audio-asr-streaming-websocket-api)。
+
+| 项 | 值 |
+|---|---|
+| 地址 | `wss://dashscope.aliyuncs.com/api-ws/v1/inference`（Inference 协议，百炼） |
+| 模型 | `qwen-audio-3.1-asr-flash-streaming`（实测可用） |
+| 鉴权 | 握手阶段 `Authorization: Bearer <Key>`，复用上面的 API Key |
+| 计费 | 约 1.19 元/小时（比非实时贵 ~50%） |
+| 依赖 | 插件自带 `ws` 包（`pnpm install` 会装） |
+
+工作方式：**一次长按 = 一个 WebSocket 会话**
+
+```
+浏览器每 0.5s 发增量 PCM → 宿主转 int16 帧推给 WS → 服务端持续回 result-generated
+→ interim 请求直接返回宿主缓存的当前文本（0~20ms，不再等云端）
+→ 松手发 finish-task → 等 task-finished → 用最终文本写入草稿
+```
+
+实测（真实 key，6 秒语音）：
+
+```
+[0.5s] 21ms ""   [1.0s] 1ms ""   [1.5s] 0ms ""   [2.0s] 1ms "针馏是"
+[3.0s] 1ms "针馏是的效果是"   [3.5s] 1ms "真流式的效果是边说边出字"
+[4.5s] 1ms "真流式的效果是边说边出字，最后"
+[定稿] 752ms "真流式的效果是边说边出字，最后再统一更新一次。"
+```
+
+- 中间结果会**跳变/自我修正**（"针馏是"→"真流式"），这是流式模型的正常行为；最终以定稿为准。
+- 每 0.5 秒的 interim 请求**不再打云端**（只是取宿主缓存），所以预览很便宜，只有音频本身在计费。
+- 失败自动回退：WS 连不上 / `task-failed` / 超时 → 自动改用 HTTP 云端（若配了）或本地 SenseVoice，定稿不丢。
+- `stream: true`（同一次请求内部 token 流）仍未接：它对"边说边出"帮助有限，真流式已经覆盖。
 
 ### 6.3 其他行为
 
@@ -278,6 +311,7 @@ H:\DSH-鼠标语音输入\
 │  ├─ asr-worker.mjs     # 本地 sherpa-onnx 解码(上游原样)
 │  ├─ model-cache.js     # 本地模型下载缓存(上游原样)
 │  ├─ cloud-asr.mjs      # 第三方 ASR 转发(WAV 编码 + 两种协议 + system 提示词)
+│  ├─ realtime-asr.mjs   # 真流式 WebSocket 会话(推 PCM / 收增量 / finish)
 │  ├─ wordbank.mjs       # 词库解析(术语表/纠错规则)与本地后处理
 │  └─ settings-store.mjs # 设置持久化 + 校验 + 脱敏视图
 ├─ node_modules\         # 自带 sherpa-onnx,不依赖 profile
@@ -290,11 +324,12 @@ H:\DSH-鼠标语音输入\
 
 ```
 lib/cloud-asr.mjs       新增 ~260 行
+lib/realtime-asr.mjs    新增 ~290 行(WebSocket 真流式)
 lib/wordbank.mjs        新增 ~150 行
-lib/settings-store.mjs  新增 ~150 行
-lib/index.js            +默认配置/提示词合成/云端分支/设置路由/热更新,~200 行
-lib/client.js           +草稿采集与 base64url、settings.section 设置页,~330 行
-package.json / cordis.patch.yml  版本与配置模板
+lib/settings-store.mjs  新增 ~170 行
+lib/index.js            +默认配置/提示词合成/云端分支/真流式会话/设置路由/热更新,~300 行
+lib/client.js           +草稿采集与 base64url、settings.section 设置页(含真流式开关),~380 行
+package.json / cordis.patch.yml  版本、依赖(ws)、配置模板
 ```
 
 上游若发新版：覆盖 `asr-worker.mjs` / `model-cache.js` 与 `client.js` 的长按逻辑部分后，把本目录的 `lib/index.js`、`lib/client.js` 里带 `cloudAsr` / `wordbank` / `settings.section` 的补丁重新打一遍（各段都有明显注释块）。
